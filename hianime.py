@@ -16,6 +16,7 @@ HEADERS = {
     )
 }
 
+# Load previously sent item identifiers to prevent duplicates
 def load_sent_ids():
     if not os.path.exists(STATE_FILE):
         return set()
@@ -48,44 +49,28 @@ for item in reversed(anime_items):
             continue
             
         title = title_elem.get_text(strip=True)
+        relative_link = title_elem.get("href", "")
+        site_url = f"https://hianime.at{relative_link}" if relative_link.startswith("/") else relative_link
         
-        # Base link is usually the overview page (e.g., /anime-name-123)
-        overview_link = title_elem.get("href", "")
+        # Unique identifier for the item
+        item_id = item.get("data-id") or relative_link
         
-        # Check if an episode exists
-        eps_elem = item.select_one(".tick-eps")
-        latest_ep = eps_elem.get_text(strip=True) if eps_elem else ""
-
-        # Determine if it has an actual episode released
-        has_episodes = latest_ep and latest_ep != "0" and "coming" not in latest_ep.lower()
-
-        if has_episodes:
-            # Construct the watch/episode link format
-            watch_link = overview_link if "/watch/" in overview_link else overview_link.replace("/", "/watch/", 1)
-            site_url = f"https://hianime.at{watch_link}" if watch_link.startswith("/") else watch_link
-            
-            # Unique ID tracking for specific episode releases
-            item_id = f"{overview_link}-ep-{latest_ep}"
-            message = f"🎬 **New Episode Release**\n**{title}** - Episode {latest_ep}\n{site_url}"
-        else:
-            # Fallback to overview page if no episodes are out yet
-            site_url = f"https://hianime.at{overview_link}" if overview_link.startswith("/") else overview_link
-            
-            # Unique ID tracking for the overview/announcement
-            item_id = f"{overview_link}-overview"
-            message = f"📢 **New Anime Added (Overview)**\n**{title}**\n{site_url}"
-
         if item_id in sent_ids:
             continue
 
+        eps_elem = item.select_one(".tick-eps")
+        latest_ep = eps_elem.get_text(strip=True) if eps_elem else "N/A"
+
         # Send webhook notification
-        requests.post(WEBHOOK, json={"content": message}, timeout=30)
+        requests.post(WEBHOOK, json={
+            "content": f"**HiAnime Release** | {title}, Episode {latest_ep}\n{site_url}"
+        }, timeout=30)
         
         new_sent_ids.add(item_id)
         time.sleep(0.5)
     except Exception as err:
         print(f"Error parsing item: {err}")
 
-# Save state back to file (keeping the last 150 sent IDs)
-all_ids = list(sent_ids.union(new_sent_ids))[-150:]
+# Save state back to file (keeping the last 100 sent IDs to avoid infinite file growth)
+all_ids = list(sent_ids.union(new_sent_ids))[-100:]
 open(STATE_FILE, "w", encoding="utf-8").write("\n".join(all_ids))
