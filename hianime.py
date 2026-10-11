@@ -15,7 +15,7 @@ HEADERS = {
         "Chrome/120.0.0.0 Safari/537.36"
     )
 }
-#1
+
 # Load previously sent item identifiers to prevent duplicates
 def load_sent_ids():
     if not os.path.exists(STATE_FILE):
